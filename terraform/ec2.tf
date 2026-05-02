@@ -24,8 +24,55 @@ data "aws_ami" "ubuntu" {
 # ── Networking ────────────────────────────────────────────────────────────────
 
 # Use the default VPC — no need to create a custom one for a POC
-resource "aws_default_vpc" "default" {
-  tags = { Name = "default" }
+resource "aws_vpc" "nanoclaw" {
+  cidr_block           = "10.42.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name    = "${var.project_name}-vpc"
+    Project = var.project_name
+  }
+}
+
+resource "aws_internet_gateway" "nanoclaw" {
+  vpc_id = aws_vpc.nanoclaw.id
+
+  tags = {
+    Name    = "${var.project_name}-igw"
+    Project = var.project_name
+  }
+}
+
+resource "aws_subnet" "nanoclaw" {
+  vpc_id                  = aws_vpc.nanoclaw.id
+  cidr_block              = "10.42.1.0/24"
+  availability_zone       = "${var.aws_region}a"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name    = "${var.project_name}-public-subnet"
+    Project = var.project_name
+  }
+}
+
+resource "aws_route_table" "nanoclaw" {
+  vpc_id = aws_vpc.nanoclaw.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.nanoclaw.id
+  }
+
+  tags = {
+    Name    = "${var.project_name}-rt"
+    Project = var.project_name
+  }
+}
+
+resource "aws_route_table_association" "nanoclaw" {
+  subnet_id      = aws_subnet.nanoclaw.id
+  route_table_id = aws_route_table.nanoclaw.id
 }
 
 # ── Security group ────────────────────────────────────────────────────────────
@@ -33,7 +80,7 @@ resource "aws_default_vpc" "default" {
 resource "aws_security_group" "nanoclaw" {
   name        = "${var.project_name}-sg"
   description = "NanoClaw POC: SSH from your IP only. All outbound allowed (WhatsApp, Claude API)."
-  vpc_id      = aws_default_vpc.default.id
+  vpc_id      = aws_vpc.nanoclaw.id
 
   # SSH — your IP only
   ingress {
@@ -65,6 +112,7 @@ resource "aws_instance" "nanoclaw" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.instance_type
   key_name               = var.key_pair_name
+  subnet_id              = aws_subnet.nanoclaw.id
   vpc_security_group_ids = [aws_security_group.nanoclaw.id]
 
   # Auto-install all prerequisites on first boot

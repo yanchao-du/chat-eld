@@ -1,3 +1,8 @@
+output "vpc_id" {
+  description = "Dedicated VPC created for this project."
+  value       = aws_vpc.nanoclaw.id
+}
+
 output "instance_id" {
   description = "EC2 instance ID — use this to start/stop via AWS CLI."
   value       = aws_instance.nanoclaw.id
