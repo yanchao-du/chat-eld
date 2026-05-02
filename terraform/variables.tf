@@ -11,9 +11,9 @@ variable "aws_profile" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type. t3.micro = free tier (12 months). t3.small = $15/mo for more headroom."
+  description = "EC2 instance type. t3.small (2GB RAM) recommended — t3.micro OOMs during NanoClaw Docker build."
   type        = string
-  default     = "t3.micro"
+  default     = "t3.small"
 }
 
 variable "key_pair_name" {
