@@ -1,1 +1,2 @@
-/docs
+/docs/*.md
+!/docs/setup-guide.md
