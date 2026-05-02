@@ -1,0 +1,13 @@
+{
+  "name": "election-bot",
+  "description": "ELD Singapore Election Information Assistant — answers voter questions grounded in official ELD content",
+  "model": "bedrock.claude-haiku-4-5",
+  "requiresTrigger": false,
+  "knowledgeMount": {
+    "path": "/workspace/knowledge/wiki",
+    "description": "LLM Wiki compiled from official ELD content (eld.gov.sg)"
+  },
+  "maxTokens": 512,
+  "channels": ["whatsapp", "telegram"],
+  "persona": "CLAUDE.md"
+}
