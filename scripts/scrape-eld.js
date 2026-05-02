@@ -1,3 +1,5 @@
+'use strict';
+
 const FirecrawlApp = require('@mendable/firecrawl-js').default;
 const fs = require('fs');
 const path = require('path');
@@ -71,7 +73,7 @@ async function main() {
     const ok = await scrapeOne(url, outputPath);
     console.log(ok ? '✓' : 'FAILED');
     if (ok) successCount++;
-    await new Promise(r => setTimeout(r, 1500)); // Firecrawl free tier: ~1 req/sec
+    await new Promise(r => setTimeout(r, 1500));
   }
   console.log(`  Priority: ${successCount}/${PRIORITY_URLS.length} succeeded.\n`);
 
@@ -113,7 +115,7 @@ async function main() {
   console.log(`Done. Total markdown files: ${allFiles.length}`);
   console.log(`Output directory: ${OUTPUT_DIR}`);
   console.log('');
-  console.log('Next step: organise files, then run wiki compilation.');
+  console.log('Next step: run wiki compilation.');
   console.log('  node scripts/wiki-compile.js');
 }
 
