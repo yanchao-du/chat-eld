@@ -24,8 +24,8 @@ data "aws_ami" "ubuntu" {
 # ── Networking ────────────────────────────────────────────────────────────────
 
 # Use the default VPC — no need to create a custom one for a POC
-data "aws_vpc" "default" {
-  default = true
+resource "aws_default_vpc" "default" {
+  tags = { Name = "default" }
 }
 
 # ── Security group ────────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ data "aws_vpc" "default" {
 resource "aws_security_group" "nanoclaw" {
   name        = "${var.project_name}-sg"
   description = "NanoClaw POC: SSH from your IP only. All outbound allowed (WhatsApp, Claude API)."
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = aws_default_vpc.default.id
 
   # SSH — your IP only
   ingress {
