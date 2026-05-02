@@ -1,6 +1,7 @@
 'use strict';
 
-const FirecrawlApp = require('@mendable/firecrawl-js').default;
+const _firecrawl = require('@mendable/firecrawl-js');
+const FirecrawlApp = _firecrawl.default ?? _firecrawl;
 const fs = require('fs');
 const path = require('path');
 
