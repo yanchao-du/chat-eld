@@ -91,7 +91,7 @@ resource "aws_security_group" "nanoclaw" {
   }
 
   ingress {
-    description = "Webapp (Next.js) — public"
+    description = "Webapp (Next.js) - public"
     from_port   = 3001
     to_port     = 3001
     protocol    = "tcp"
