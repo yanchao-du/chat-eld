@@ -16,8 +16,8 @@ export default defineConfig({
       name: 'chromium',
       use: {
         browserName: 'chromium',
-        executablePath: '/home/windows/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome',
         launchOptions: {
+          executablePath: '/home/windows/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome',
           args: ['--no-sandbox', '--disable-setuid-sandbox'],
           env: {
             LD_LIBRARY_PATH: '/tmp/libasound2-extracted/usr/lib/x86_64-linux-gnu',
