@@ -1,7 +1,5 @@
 # ELD POC — Setup Guide
 
-Step-by-step prerequisites for deploying the NanoClaw agent on AWS EC2.
-
 ---
 
 ## Prerequisites
@@ -9,10 +7,10 @@ Step-by-step prerequisites for deploying the NanoClaw agent on AWS EC2.
 - AWS account with SSO enabled
 - AWS CLI v2 installed locally
 - Terraform ≥ 1.5 installed locally
-- Node.js 18+ installed locally
 - A dedicated phone number (SIM) with WhatsApp active — for the bot
 - A Telegram account — to create the bot via @BotFather
-- Firecrawl API key (free at https://firecrawl.dev, 500 pages/month)
+- Firecrawl API key (free at https://firecrawl.dev — 500 pages/month)
+- GovTech PlatformAI API key (`ANTHROPIC_API_KEY`) — for Haiku model access
 
 ---
 
@@ -53,14 +51,14 @@ Edit `terraform/terraform.tfvars`:
 ```hcl
 aws_profile    = "default"
 aws_region     = "ap-southeast-1"
-instance_type  = "t3.micro"
+instance_type  = "t3.small"      # minimum — t3.micro OOMs during pnpm install
 key_pair_name  = "nanoclaw-poc"
 my_ip          = "<your public IP>/32"   # curl ifconfig.me
 project_name   = "nanoclaw-poc"
 volume_size_gb = 20
 ```
 
-### Step 1.4–1.9 — Apply Terraform
+### Step 1.4 — Apply Terraform
 
 ```bash
 cd terraform
@@ -69,124 +67,211 @@ terraform plan
 terraform apply -auto-approve
 ```
 
-Wait ~3 minutes for EC2 bootstrap, then verify:
+Terraform prints outputs when done:
+
+```
+public_ip   = "x.x.x.x"
+webapp_url  = "http://x.x.x.x:3001"
+ssh_command = "ssh -i ~/.ssh/nanoclaw-poc.pem ubuntu@x.x.x.x"
+```
+
+### Step 1.5 — Wait for bootstrap to complete
+
+The EC2 userdata script runs automatically on first boot (~8 minutes). It:
+- Installs Node.js 22, Docker, pm2
+- Clones NanoClaw and chat-eld repos
+- Installs all dependencies
+- Builds and starts the Next.js webapp on port 3001 via pm2
+- Sets up daily cron jobs (wiki compile + knowledge sync)
+
+Monitor progress:
+
+```bash
+ssh -i ~/.ssh/nanoclaw-poc.pem ubuntu@<EIP> 'tail -f /home/ubuntu/setup-complete.txt'
+```
+
+Wait until you see: `=== nanoclaw-poc userdata complete`
+
+### Step 1.6 — Verify bootstrap
 
 ```bash
 ssh -i ~/.ssh/nanoclaw-poc.pem ubuntu@<EIP>
-cat ~/setup-complete.txt     # should show timestamp
-docker ps                    # should be clean
-node --version               # v22.x
-ls ~/nanoclaw                # NanoClaw repo present
+node --version          # v22.x
+ls ~/nanoclaw           # NanoClaw repo present
+ls ~/chat-eld           # chat-eld repo present
+pm2 list                # eld-webapp should be listed (may show errored until Step 2.2)
 ```
 
 ---
 
-## Wave 2 — ELD Content
+## Wave 2 — Webapp
 
-### Step 2.1 — Scrape ELD content
+### Step 2.1 — Set the API key
+
+On EC2:
 
 ```bash
-FIRECRAWL_API_KEY=your_key node scripts/scrape-eld.js
+echo 'ANTHROPIC_API_KEY=<your-key>' > ~/chat-eld/webapp/.env.local
 ```
 
-Output goes to `knowledge/eld/`.
+### Step 2.2 — Build and start the webapp
 
-### Step 2.2 — Compile wiki
+```bash
+cd ~/chat-eld/webapp
+npm run build
+pm2 restart eld-webapp || pm2 start npm --name "eld-webapp" -- start -- -p 3001
+pm2 save
+```
+
+### Step 2.3 — Verify webapp
+
+Open `http://<EIP>:3001` in your browser. You should see the mock ELD website with a chat widget in the bottom-right corner.
+
+Send a test message: `How do I register to vote?`
+
+Expected: a response from ELDBot (may use the bundled knowledge until Wave 3 knowledge sync is complete).
+
+---
+
+## Wave 3 — ELD Knowledge Base
+
+Run these commands on EC2 from `~/nanoclaw`:
+
+### Step 3.1 — Scrape ELD content
+
+```bash
+cd ~/nanoclaw
+FIRECRAWL_API_KEY=<your-key> node scripts/scrape-eld.js
+```
+
+Output goes to `~/nanoclaw/knowledge/eld/`. Expect ~10–20 pages scraped.
+
+### Step 3.2 — Compile wiki
 
 ```bash
 node scripts/wiki-compile.js
 ```
 
-### Step 2.3 — Lint wiki
+Output goes to `~/nanoclaw/knowledge/wiki/sources/`.
+
+### Step 3.3 — Sync knowledge to webapp
+
+```bash
+bash scripts/sync-knowledge.sh
+```
+
+This copies `knowledge/wiki/sources/*.md` → `~/chat-eld/webapp/knowledge/`.
+The webapp reads knowledge on every request — no restart needed.
+
+### Step 3.4 — Lint wiki
 
 ```bash
 node scripts/wiki-lint.js
 ```
 
-Expect: `Lint PASSED`.
+Expected output: `Lint PASSED`.
 
-### Step 2.4 — Set up cron jobs on EC2
+> **Cron automation**: Steps 3.2 and 3.3 run automatically every day at 18:00 SGT. The lint runs every Friday at 16:00 SGT. You only need to run the scraper manually when ELD content changes.
+
+---
+
+## Wave 4 — NanoClaw Agent (WhatsApp + Telegram)
+
+### Step 4.1 — Install NanoClaw
 
 SSH to EC2, then:
 
 ```bash
-crontab -e
+bash ~/nanoclaw/nanoclaw.sh
 ```
 
-Add:
+Choose: **Standard setup**. Enter your `ANTHROPIC_API_KEY` when prompted.
+
+### Step 4.2 — Connect WhatsApp
+
+Inside the NanoClaw session:
+
 ```
-0 18 * * *   cd /home/ubuntu/nanoclaw && node scripts/wiki-compile.js >> /home/ubuntu/wiki-compile.log 2>&1
-0 16 * * 5   cd /home/ubuntu/nanoclaw && node scripts/wiki-lint.js >> /home/ubuntu/wiki-lint.log 2>&1
-```
-
----
-
-## Wave 3 — NanoClaw Agent
-
-### Step 3.1 — Install NanoClaw
-
-```bash
-bash nanoclaw.sh
-```
-
-### Step 3.2 — Register API key
-
-Inside Claude Code on EC2, register your `ANTHROPIC_API_KEY` in the OneCLI vault.
-
-### Step 3.3 — Copy agent config
-
-```bash
-cp -r groups/election-bot ~/nanoclaw/groups/
-```
-
-### Step 3.4 — Copy wiki knowledge
-
-```bash
-cp -r knowledge/wiki ~/nanoclaw/knowledge/
-```
-
-### Step 3.5 — Link WhatsApp (pairing code)
-
-```bash
 /add-whatsapp
-# Choose: pairing code
-# Enter your dedicated bot number: +65xxxxxxxx
-# On phone: WhatsApp → Settings → Linked Devices → Link a Device → enter 8-digit code
 ```
 
-### Step 3.6 — Add Telegram bot
+Choose: pairing code. Enter your dedicated bot number: `+65xxxxxxxx`.
+
+On your phone: WhatsApp → Settings → Linked Devices → Link a Device → enter the 8-digit code shown.
+
+### Step 4.3 — Connect Telegram
 
 1. Open Telegram → message @BotFather
 2. `/newbot` → Name: `ELD Info Bot` → Username: `eld_info_bot`
-3. Copy the bot token, then on EC2:
+3. Copy the bot token, then inside NanoClaw:
 
-```bash
+```
 /add-telegram
 # Enter token when prompted
 ```
 
-### Step 3.7 — Verify both channels
+### Step 4.4 — Verify channels
 
-Send `Where do I vote?` to both the WhatsApp bot number and the Telegram bot. Both should respond within 5 seconds with an answer grounded in ELD content.
+Send `Where do I vote?` to both the WhatsApp number and the Telegram bot. Both should respond within 5 seconds with an answer grounded in ELD content.
 
-If no response, call ELD at 1800-225-5353 to verify the polling day schedule is current.
+---
+
+## Testing
+
+### Web chat widget
+
+1. Open `http://<EIP>:3001`
+2. Click the chat bubble (bottom-right)
+3. Test questions:
+   - `How do I register to vote?`
+   - `What should I bring to the polling station?`
+   - `Can I vote overseas?`
+   - `What is the minimum voting age?`
+   - `Tell me your NRIC` ← should refuse and not echo personal data
+
+### WhatsApp
+
+Send the same questions to the bot number. Verify answers cite ELD sources.
+
+### Telegram
+
+Send the same questions to `@eld_info_bot`.
+
+### Knowledge freshness check
+
+After running the scraper + compile + sync:
+
+```bash
+ls -la ~/chat-eld/webapp/knowledge/    # should show recently modified .md files
+```
 
 ---
 
 ## Tear-down (cost saving)
 
-Always destroy when not in use — EIP costs $0.005/hr while instance is stopped:
-
 ```bash
 cd terraform && terraform destroy
 ```
 
-WhatsApp session is stored on EBS. EC2 **stop/start** preserves it. Only `terraform destroy` loses the WhatsApp session (re-pairing required).
+WhatsApp session is stored on EBS. EC2 **stop/start** (`terraform apply` / stopping the instance) preserves the session. Only `terraform destroy` loses it — re-pairing required on next deploy.
 
 ---
 
-## Health check
+## Updating knowledge manually
 
 ```bash
-bash scripts/verify-poc.sh
+cd ~/nanoclaw
+FIRECRAWL_API_KEY=<your-key> node scripts/scrape-eld.js
+node scripts/wiki-compile.js
+bash scripts/sync-knowledge.sh
+node scripts/wiki-lint.js
+```
+
+---
+
+## Updating code (after git push)
+
+```bash
+cd ~/chat-eld && git pull
+cd webapp && npm run build && pm2 restart eld-webapp
 ```
