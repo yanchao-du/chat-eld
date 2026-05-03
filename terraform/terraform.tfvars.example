@@ -3,7 +3,7 @@
 
 aws_profile   = "your-sso-profile-name"   # from `aws configure sso`
 aws_region    = "ap-southeast-1"           # Singapore
-instance_type = "t3.micro"                 # free tier; use t3.small for more comfort
+instance_type = "t3.small"                 # t3.micro OOMs during pnpm install
 key_pair_name = "your-key-pair-name"       # must exist in EC2 → Key Pairs
 my_ip         = "1.2.3.4/32"              # run: curl ifconfig.me
 project_name  = "nanoclaw-poc"
