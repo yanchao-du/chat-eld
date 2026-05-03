@@ -59,6 +59,9 @@ su - ubuntu -c '
   cp /home/ubuntu/chat-eld/scripts/package.json        /home/ubuntu/nanoclaw/scripts/
   chmod +x /home/ubuntu/nanoclaw/scripts/sync-knowledge.sh
 
+  # Install script dependencies (firecrawl etc.)
+  cd /home/ubuntu/nanoclaw/scripts && npm install --no-fund --no-audit
+
   # Copy agent config
   mkdir -p /home/ubuntu/nanoclaw/groups/election-bot
   cp /home/ubuntu/chat-eld/groups/election-bot/CLAUDE.md   /home/ubuntu/nanoclaw/groups/election-bot/
