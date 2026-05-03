@@ -52,10 +52,12 @@ su - ubuntu -c '
   git clone https://github.com/yanchao-du/chat-eld.git /home/ubuntu/chat-eld
 
   # Copy scripts (with their package.json so type=commonjs is respected)
-  cp /home/ubuntu/chat-eld/scripts/scrape-eld.js    /home/ubuntu/nanoclaw/scripts/
-  cp /home/ubuntu/chat-eld/scripts/wiki-compile.js  /home/ubuntu/nanoclaw/scripts/
-  cp /home/ubuntu/chat-eld/scripts/wiki-lint.js     /home/ubuntu/nanoclaw/scripts/
-  cp /home/ubuntu/chat-eld/scripts/package.json     /home/ubuntu/nanoclaw/scripts/
+  cp /home/ubuntu/chat-eld/scripts/scrape-eld.js       /home/ubuntu/nanoclaw/scripts/
+  cp /home/ubuntu/chat-eld/scripts/wiki-compile.js     /home/ubuntu/nanoclaw/scripts/
+  cp /home/ubuntu/chat-eld/scripts/wiki-lint.js        /home/ubuntu/nanoclaw/scripts/
+  cp /home/ubuntu/chat-eld/scripts/sync-knowledge.sh   /home/ubuntu/nanoclaw/scripts/
+  cp /home/ubuntu/chat-eld/scripts/package.json        /home/ubuntu/nanoclaw/scripts/
+  chmod +x /home/ubuntu/nanoclaw/scripts/sync-knowledge.sh
 
   # Copy agent config
   mkdir -p /home/ubuntu/nanoclaw/groups/election-bot
@@ -67,8 +69,27 @@ su - ubuntu -c '
   mkdir -p /home/ubuntu/nanoclaw/knowledge/wiki
 '
 
-# ── Pre-pull NanoClaw Docker base image (so nanoclaw.sh sandbox build is fast)
-# Run as ubuntu so docker group membership applies
+# ── Webapp: install pm2, build Next.js app, start as service ─────────────────
+su - ubuntu -c '
+  export NVM_DIR="$HOME/.nvm"
+  source "$NVM_DIR/nvm.sh"
+
+  npm install -g pm2
+
+  cd /home/ubuntu/chat-eld/webapp
+  npm install
+  npm run build
+  PORT=3001 pm2 start npm --name "eld-webapp" -- start -- -p 3001
+  pm2 save
+'
+
+# pm2 startup so webapp survives reboots (must run as root to install the service)
+env PATH="$(su - ubuntu -c 'export NVM_DIR=$HOME/.nvm; source $NVM_DIR/nvm.sh; echo $PATH')":$PATH \
+  $(su - ubuntu -c 'export NVM_DIR=$HOME/.nvm; source $NVM_DIR/nvm.sh; which pm2') \
+  startup systemd -u ubuntu --hp /home/ubuntu || true
+systemctl enable pm2-ubuntu || true
+
+# ── Pre-pull NanoClaw Docker base image (so nanoclaw.sh sandbox build is fast)# Run as ubuntu so docker group membership applies
 su - ubuntu -c '
   docker pull node:22-slim || true
   docker pull ubuntu:24.04 || true
@@ -80,7 +101,7 @@ su - ubuntu -c '
   source "$NVM_DIR/nvm.sh"
   NODE_BIN=$(which node)
 
-  (crontab -l 2>/dev/null; echo "0 18 * * *   cd /home/ubuntu/nanoclaw && $NODE_BIN scripts/wiki-compile.js >> /home/ubuntu/wiki-compile.log 2>&1") | crontab -
+  (crontab -l 2>/dev/null; echo "0 18 * * *   cd /home/ubuntu/nanoclaw && $NODE_BIN scripts/wiki-compile.js >> /home/ubuntu/wiki-compile.log 2>&1 && bash scripts/sync-knowledge.sh >> /home/ubuntu/wiki-compile.log 2>&1") | crontab -
   (crontab -l 2>/dev/null; echo "0 16 * * 5   cd /home/ubuntu/nanoclaw && $NODE_BIN scripts/wiki-lint.js >> /home/ubuntu/wiki-lint.log 2>&1") | crontab -
 '
 
@@ -90,8 +111,14 @@ echo "Manual steps remaining:"
 echo "  1. SSH in and run: bash ~/nanoclaw/nanoclaw.sh"
 echo "     - Choose: Standard setup"
 echo "     - Enter ANTHROPIC_API_KEY when prompted"
-echo "  2. Inside NanoClaw: /add-whatsapp (pairing code)"
-echo "  3. Inside NanoClaw: /add-telegram (enter BotFather token)"
-echo "  4. Run scraper: FIRECRAWL_API_KEY=xxx node ~/nanoclaw/scripts/scrape-eld.js"
-echo "  5. Compile wiki: node ~/nanoclaw/scripts/wiki-compile.js"
+echo "  2. Add ANTHROPIC_API_KEY for the webapp:"
+echo "     echo 'ANTHROPIC_API_KEY=<your-key>' > ~/chat-eld/webapp/.env.local"
+echo "     cd ~/chat-eld/webapp && npm run build && pm2 restart eld-webapp"
+echo "  3. Inside NanoClaw: /add-whatsapp (pairing code)"
+echo "  4. Inside NanoClaw: /add-telegram (enter BotFather token)"
+echo "  5. Run scraper: FIRECRAWL_API_KEY=xxx node ~/nanoclaw/scripts/scrape-eld.js"
+echo "  6. Compile wiki + sync to webapp:"
+echo "     cd ~/nanoclaw && node scripts/wiki-compile.js && bash scripts/sync-knowledge.sh"
+echo "  7. Lint wiki: node ~/nanoclaw/scripts/wiki-lint.js"
+echo "  8. Webapp is running at http://localhost:3001 (open port 3001 in security group if needed)"
 chown ubuntu:ubuntu /home/ubuntu/setup-complete.txt

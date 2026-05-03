@@ -23,6 +23,11 @@ output "instance_state" {
   value       = aws_instance.nanoclaw.instance_state
 }
 
+output "webapp_url" {
+  description = "ELD mock webapp URL — open in browser after setup is complete."
+  value       = "http://${aws_eip.nanoclaw.public_ip}:3001"
+}
+
 output "ami_id" {
   description = "Ubuntu 24.04 AMI used."
   value       = data.aws_ami.ubuntu.id

@@ -82,13 +82,20 @@ resource "aws_security_group" "nanoclaw" {
   description = "NanoClaw POC: SSH from your IP only. All outbound allowed (WhatsApp, Claude API)."
   vpc_id      = aws_vpc.nanoclaw.id
 
-  # SSH — your IP only
   ingress {
     description = "SSH from operator IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = [var.my_ip]
+  }
+
+  ingress {
+    description = "Webapp (Next.js) — public"
+    from_port   = 3001
+    to_port     = 3001
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   # All outbound — NanoClaw connects OUT to WhatsApp/Claude API
